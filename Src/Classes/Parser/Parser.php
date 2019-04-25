@@ -25,14 +25,14 @@ class Parser {
         $this->imagesPath = getenv('IMAGES_PATH');
         $this->symlink = getenv('SYMLINK_PATH');
         $this->xmlInput = getenv('XML_PATH');
-        $this->mode = Helpers::setMode();
+        $this->mode = setMode();
 
         $this->enableLogger($env . $this->logPath);
 
-        Helpers::createDirectories(['storage/', '/storage/images/', $this->xmlOutput, $this->jsonDir], $this->envPath = $env);
+        createDirectories(['storage/', '/storage/images/', $this->xmlOutput, $this->jsonDir], $this->envPath = $env);
 
-        $lastCreated = Helpers::lastCreatedFile($this->envPath . $this->xmlOutput);
-        $similarFiles = Helpers::compareFiles($lastCreated, $this->xmlInput);
+        $lastCreated = lastCreatedFile($this->envPath . $this->xmlOutput);
+        $similarFiles = compareFiles($lastCreated, $this->xmlInput);
 
 
         if (!$similarFiles || $this->debug) {
@@ -55,18 +55,16 @@ class Parser {
         if ($mode == "f") {
             $fullpath = $this->envPath . $this->jsonDir . "/apartments{$this->datetime}.json";
 
-            Helpers::limitFiles($this->jsonDir);
-            Helpers::saveJsonFile($fullpath, $json);
-            Helpers::createSymlink($this->symlink,$fullpath);
+            limitFiles($this->jsonDir);
+            saveJsonFile($fullpath, $json);
+            createSymlink($this->symlink,$fullpath);
         }
-
-
     }
 
     private function copyXmlFile($filename) {
 
         $srcfilepath = $this->envPath . $this->xmlOutput . "realtyObjects{$this->datetime}.xml";
-        Helpers::limitFiles($this->envPath . $this->xmlOutput);
+        limitFiles($this->envPath . $this->xmlOutput);
 
         if (copy($filename, $srcfilepath))
             chmod($srcfilepath,0777);
@@ -89,10 +87,7 @@ class Parser {
         $this->logger->info("Добавлена квартира {$apartment->new_number->__toString()}");
 
         $terrace = 0;
-        foreach ($areas as $value)
-            if ($value == 'Терраса') $terrace = 1;
-
-
+        foreach ($areas as $value) if ($value == 'Терраса') $terrace = 1;
 
         $apartment = [
             'apartment_id' => $id,
@@ -119,15 +114,7 @@ class Parser {
             "objectareas" => $areas,
             "terrace" => $terrace,
             "finish" => ($apartment->new_finish->__toString() !== "1") ? "0" : "1",
-            "link" => $this->createUrl(
-                $apartment['korpus'],
-                $apartment['section'],
-                $apartment['floor'],
-                $numberOnFloor,
-                $number,
-                $quanity,
-                $id
-            ),
+            "link" => createUrl($apartment['korpus'], $apartment['section'], $apartment['floor'], $numberOnFloor, $number, $quanity, $id),
         ];
 
         $imagesOptions = [
@@ -213,7 +200,7 @@ class Parser {
             unset($floors);
         }
         $imagesPath = getenv('SYMLINK_IMAGES_PATH');
-        Helpers::createSymlink($imagesPath,$this->envPath . "/storage/images/apartment{$this->datetime}/");
+        createSymlink($imagesPath,$this->envPath . "/storage/images/apartment{$this->datetime}/");
 
         $this->saveAsJson($sections, $this->mode);
 
@@ -242,7 +229,7 @@ class Parser {
         $destPath = "{$dir}/{$id}/{$folder}/";
 
         $image = null;
-        if (is_dir($srcPath) && !Helpers::is_dir_empty($srcPath))
+        if (is_dir($srcPath) && !is_dir_empty($srcPath))
             $image = scandir($srcPath)[2];
 
         if ($image && !is_dir($destPath)) {
@@ -292,13 +279,6 @@ class Parser {
         $image->compositeImage($watermark, imagick::COMPOSITE_OVER, $x+270, $y+300);
         $image->writeImage ($destImage);
 
-    }
-
-    function createUrl($korp, $sec, $floor, $fnumb, $numb, $qty, $id){
-
-        $link = "/apartments/korp{$korp}/sec{$sec}/floor{$floor}/fnumb{$fnumb}/numb{$numb}/quantity{$qty}/id{$id}/";
-
-        return $link;
     }
 
 }

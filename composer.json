@@ -13,6 +13,9 @@
         "ext-SimpleXML": "^7.2"
     },
     "autoload": {
-        "psr-4": {"Parser\\": "src/"}
+        "psr-4": {"Parser\\": "Src/"},
+        "files": [
+            "Src/helpers.php"
+        ]
     }
 }
