@@ -1,0 +1,18 @@
+{
+    "name": "nobiiru/parser",
+    "authors": [
+        {
+            "name": "Владислав Анатольевич",
+            "email": "djvla64rus@gmail.com"
+        }
+    ],
+    "require": {
+        "vlucas/phpdotenv": "^3.3",
+        "psr/log": "^1.1",
+        "monolog/monolog": "^1.24",
+        "ext-SimpleXML": "^7.2"
+    },
+    "autoload": {
+        "psr-4": {"Parser\\": "src/"}
+    }
+}

@@ -1,0 +1,3 @@
+#!/usr/bin/php bash
+PHP=`which php`
+$PHP parser.php
