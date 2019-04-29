@@ -1,70 +1,104 @@
 <?php
+/**
+ * Parser (parser.php)
+ *
+ * @author      Satsko Vladislav <djvla64rus@gmail.com>
+ *
+ */
 namespace Parser;
 
-use Imagick;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
-
+use Exception;
+/*
+ * Parser
+ */
 class Parser {
 
-    private $xmlInput; // xml из конфига
-    private $imagesPath; // папка с изображениями
-    private $datetime; // время создания
-    private $symlink; // куда класть сделанный json
-    private $envPath;
-    private $debug = "1";
-    private $mode = "f"; // w - view , f - file
-    private $xmlOutput = "/storage/xml/"; // папка куда сохранять xml
-    private $jsonDir = "/storage/json/";
-    private $logPath = "/storage/parser.log";
+    private $config;
+    private $xml;
     private $logger;
+    private $datetime; // время создания
 
+    /**
+     *
+     *
+     * @param string $env   path of environment
+     * @throws \Exception
+     * @return mixed
+     */
     public function __construct($env)
     {
+        //xmlmethods
+        $this->xml = new Xml($env);
+
+        //config
+        $this->config = (new Config($env))->get();
+
+        //logger
+        $this->initLog($env);
+
+        //created_at
         $this->datetime = date('-m-d-Y-his', time());
-        $this->imagesPath = getenv('IMAGES_PATH');
-        $this->symlink = getenv('SYMLINK_PATH');
-        $this->xmlInput = getenv('XML_PATH');
-        $this->mode = setMode();
 
-        $this->enableLogger($env . $this->logPath);
-
-        createDirectories(['storage/', '/storage/images/', $this->xmlOutput, $this->jsonDir], $this->envPath = $env);
-
-        $lastCreated = lastCreatedFile($this->envPath . $this->xmlOutput);
-        $similarFiles = compareFiles($lastCreated, $this->xmlInput);
-
-
-        if (!$similarFiles || $this->debug) {
-            $this->serializeXml($this->copyXmlFile($this->xmlInput));
-        } else {
-            $this->logger->notice("Файлы идентичные {$this->xmlInput} и {$lastCreated}");
-        }
-
+        return true;
     }
 
-    private function saveAsJson($data, $mode) {
+    /**
+     *
+     * @throws Exception
+     */
 
-        $json = json_encode($data,JSON_UNESCAPED_UNICODE);
+    public function initLog($env){
+        if (!class_exists('Monolog\Logger'))
+            throw new \Exception('Logger не установлен');
 
-        if ($mode == "w") {
-            header('Content-Type: application/json');
-            echo $json;
-        }
-
-        if ($mode == "f") {
-            $fullpath = $this->envPath . $this->jsonDir . "/apartments{$this->datetime}.json";
-
-            limitFiles($this->jsonDir);
-            saveJsonFile($fullpath, $json);
-            createSymlink($this->symlink,$fullpath);
-        }
+        $this->logger = new Logger("Parser");
+        $this->logger->pushHandler(new StreamHandler($env . $this->config->logPath, Logger::NOTICE));
     }
 
-    private function copyXmlFile($filename) {
+    /**
+     *
+     * @throws Exception
+     * @return true|false
+     */
 
-        $srcfilepath = $this->envPath . $this->xmlOutput . "realtyObjects{$this->datetime}.xml";
-        limitFiles($this->envPath . $this->xmlOutput);
+    public function run(){
+
+        $dirCreated = createDirectories([
+            "/storage/",
+            $this->config->imagesOutput,
+            $this->config->xmlOutput,
+            $this->config->jsonOutput
+        ], $this->config->envPath);
+
+        if ($dirCreated) {
+            $lastCreated = lastCreatedFile($this->config->envPath . $this->config->xmlOutput);
+
+            $similarFiles = compareFiles($lastCreated, $this->config->xmlInput);
+
+            if (!$similarFiles || $this->config->debug) {
+                $xmlFile = $this->copyXmlFile($this->config->xmlInput);
+                if ($this->serializeXml($xmlFile))
+                    return true;
+
+            } else {
+                $this->logger->notice("Файлы идентичные {$this->config->xmlInput} и {$lastCreated}");
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     *
+     *
+     * @return string
+     */
+    public function copyXmlFile($filename) {
+
+        $srcfilepath = $this->config->envPath . $this->config->xmlOutput . "realtyObjects{$this->datetime}.xml";
+        limitFiles($this->config->envPath . $this->config->xmlOutput);
 
         if (copy($filename, $srcfilepath))
             chmod($srcfilepath,0777);
@@ -72,87 +106,46 @@ class Parser {
         return $srcfilepath;
     }
 
-    function appendApartment($apartment, $image, $areas = []) {
+    public function returnToWeb($data) {
+        $json = json_encode($data,JSON_UNESCAPED_UNICODE);
+        header('Content-Type: application/json');
+        echo $json;
+    }
 
-        foreach ($apartment->new_realtyobjectareas->new_realtyobjectarea as $area)
-            $areas[$area->new_name->__toString()] = $area->new_area->__toString();
+    /**
+     *
+     * @throws Exception
+     */
 
-        $id = $apartment->new_realtyobjectid->__toString();
-        $number = $apartment->new_number->__toString();
-        $numberOnFloor = $apartment->new_number_on_floor->__toString();
-        $quanity = $apartment->new_room_quantity->__toString();
+    public function saveAsJson($data, $name) {
+        $json = json_encode($data,JSON_UNESCAPED_UNICODE);
 
-        $space = "\n                        ";
+        $directory = $this->config->envPath . $this->config->jsonOutput;
 
-        $this->logger->info("Добавлена квартира {$apartment->new_number->__toString()}");
+        $fullpath = $this->config->envPath . $this->config->jsonOutput . "{$name}{$this->datetime}.json";
 
-        $terrace = 0;
-        foreach ($areas as $value) if ($value == 'Терраса') $terrace = 1;
+        $filesLimited = limitFiles($this->config->envPath . $this->config->jsonOutput);
 
-        $apartment = [
-            'apartment_id' => $id,
-            "section" => $apartment->section->__toString(),
-            'floor' => $apartment->floor->__toString(),
-            "number_on_floor" => $numberOnFloor,
-            "number" => $number,
-            "room_quantity" => $quanity,
-            "storeysnumber" => $apartment->new_storeysnumber->__toString(),
-            "type" => $apartment->new_realtyobjecttype->__toString(),
-            "area" => $apartment->new_area->__toString(),
-            "price" => $apartment->new_price->__toString(),
-            "amount" => $apartment->new_amount->__toString(),
-            "balcony" => $apartment->new_balcony->__toString(),
-            "status" => $apartment->new_realtyobjectstatus->__toString(),
-            "woodfireplace" => $apartment->new_woodfireplace->__toString(),
-            "bathroomwindow" => $apartment->new_bathroomwindow->__toString(),
-            "kitchenwindow" => $apartment->new_kitchenwindow->__toString(),
-            "action" => $apartment->new_action->__toString(),
-            "layouttype" => $apartment->layouttype->__toString(),
-            "reservation_till" => str_replace($space, "", $apartment->new_reservation_till->__toString()),
-            "area_living" => str_replace($space, "", $apartment->new_area_living->__toString()),
-            "ceilingheight" => str_replace($space, "", $apartment->new_ceilingheight->__toString()),
-            "objectareas" => $areas,
-            "terrace" => $terrace,
-            "finish" => ($apartment->new_finish->__toString() !== "1") ? "0" : "1",
-            "link" => createUrl($apartment['korpus'], $apartment['section'], $apartment['floor'], $numberOnFloor, $number, $quanity, $id),
-        ];
-
-        $imagesOptions = [
-            'Планировка' => 'layout',
-            'Планировка этажа'=> 'layout_floor',
-            'Планировка c мебелью' => 'layout_with'
-        ];
-
-        foreach ($imagesOptions as $folder => $option)
-            if (isset($image[$folder])) {
-                $nameOfFile = $image[$folder];
-                $apartment[$option] = "/images/{$id}/{$folder}/{$nameOfFile}";
+        if ($filesLimited) {
+            throw new Exception("Нет доступа к папке {$directory}");
+        } else {
+            if (!saveJsonFile($fullpath, $json)) {
+                throw new Exception("Не удалость сохранить json файл {$fullpath}");
+            } else {
+                if (!createSymlink("{$this->config->symlink}{$name}.json", $fullpath))
+                    throw new Exception('Не удалость создать символьную ссылку');
             }
 
+        }
 
-        return $apartment;
+        return true;
     }
 
-    function appendFloor($floor, $apartments) {
-        return [
-            'floor_id' => $floor->new_floorid->__toString(),
-            'floor_name' => $floor->new_name->__toString(),
-            'apartments' => $apartments
-        ];
-    }
 
-    function appendSection($section, $floors) {
-
-        return [
-            "section_id" => $section->new_sectionid->__toString(),
-            "section_name" => $section->new_name->__toString(),
-            "floors" => $floors
-        ];
-
-    }
-
-    /*
+    /**
      * Создание json array из xml с помощью функци appendApartment, appendFloor
+     * @throws Exception
+     * @return true|false
      */
 
     function serializeXml($xmlPath) {
@@ -189,43 +182,71 @@ class Parser {
                             $apartment->floor = $floor->new_name->__toString();
 
                     if (in_array($type, ["Квартира", "Апартаменты", 'Машиноместо']) && $imageExist)
-                        $apartments[$number] = $this->appendApartment($apartment, $imageArray);
+                        $apartments[$number] = $this->xml->appendApartment($apartment, $imageArray);
                 }
                 $floorName = $floor->new_name->__toString();
-                $floors[$floorName] = $this->appendFloor($floor, $apartments);
+                $floors[$floorName] = $this->xml->appendFloor($floor, $apartments);
                 unset($apartments);
             }
             $sectionName = $section->new_name->__toString();
-            $sections[$i][$sectionName] = $this->appendSection($section, $floors);
+            $sections[$i][$sectionName] = $this->xml->appendSection($section, $floors);
             unset($floors);
         }
-        $imagesPath = getenv('SYMLINK_IMAGES_PATH');
-        createSymlink($imagesPath,$this->envPath . "/storage/images/apartment{$this->datetime}/");
 
-        $this->saveAsJson($sections, $this->mode);
+        $list = $this->returnListApartments($sections);
 
-        return true;
-    }
+        createSymlink(
+            $this->config->symlinkImages,
+            $this->config->envPath . $this->config->imagesOutput . "apartment{$this->datetime}/"
+        );
 
-    /*
-     * Инициализация логгера
-     *
-     */
-    function enableLogger($logPath){
-        try {
-            $this->logger = new Logger("Parser");
-            $this->logger->pushHandler(new StreamHandler($logPath, Logger::NOTICE));
-        } catch (\Exception $e) {
-            throw new \Exception('Logger Not Found');
+
+        if ($this->config->mode == "f") {
+            $this->saveAsJson($sections, 'apartments');
+            $this->saveAsJson($list, 'list');
+        } elseif ($this->config->mode == "w"){
+            $this->returnToWeb($list);
+        } else {
+            return false;
         }
+
+        return false;
     }
 
+    function returnListApartments($data) {
+
+        $list = [];
+
+        foreach ($data as $korpus) {
+            foreach ($korpus as $sections) {
+                foreach ($sections as $floors) {
+                    if (is_array($floors)) {
+                        foreach ($floors as $floor) {
+                            foreach ($floor['apartments'] as $apartment) {
+                                if (in_array($apartment['status'], ['Свободен', 'Бронь']))
+                                    $list[] = $apartment;
+                            }
+                        }
+                    }
+
+                }
+            }
+        }
+
+        return $list;
+    }
+
+    /**
+     *
+     * @throws Exception
+     * @return string
+     */
     function copyImage($id, $folder) {
 
-        $dir = $this->envPath . "/storage/images/apartment{$this->datetime}";
+        $dir = $this->config->envPath . $this->config->imagesOutput ."apartment{$this->datetime}";
             if (!is_dir($dir)) mkdir($dir,0777, true);
 
-        $srcPath = "{$this->imagesPath}/{$id}/{$folder}/";
+        $srcPath = "{$this->config->imagesPath}/{$id}/{$folder}/";
         $destPath = "{$dir}/{$id}/{$folder}/";
 
         $image = null;
@@ -243,7 +264,7 @@ class Parser {
                     $destPath.$image
                 );
             } else {
-                $this->watermark(
+                ImageEdit::watermark(
                     $srcPath.$image,
                     $destPath.$image
                 );
@@ -251,34 +272,6 @@ class Parser {
         }
 
         return $image;
-    }
-
-
-    public function watermark($origImage, $destImage) {
-        $image = new Imagick();
-        $image->readImage($origImage);
-
-        $watermark = new Imagick();
-        $watermark->readImage($this->envPath . "/imagick.png");
-
-        $iWidth = $image->getImageWidth();
-        $iHeight = $image->getImageHeight();
-        $wWidth = $watermark->getImageWidth();
-        $wHeight = $watermark->getImageHeight();
-
-        if ($iHeight < $wHeight || $iWidth < $wWidth) {
-            $watermark->scaleImage($iWidth/4, $iHeight/4);
-
-            $wWidth = $watermark->getImageWidth();
-            $wHeight = $watermark->getImageHeight();
-        }
-
-        $x = ($iWidth - $wWidth) / 2;
-        $y = ($iHeight - $wHeight) / 2;
-
-        $image->compositeImage($watermark, imagick::COMPOSITE_OVER, $x+270, $y+300);
-        $image->writeImage ($destImage);
-
     }
 
 }

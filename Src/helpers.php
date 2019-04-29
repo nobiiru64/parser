@@ -1,6 +1,6 @@
 <?php
 if (!function_exists('compareFiles')) {
-    /*
+    /**
      * Проверка файлов по md5
      * @return true|false
      */
@@ -11,7 +11,7 @@ if (!function_exists('compareFiles')) {
 }
 
 if (!function_exists('is_dir_empty')) {
-    /*
+    /**
     * Проверка на пустую директорию
     * @return true|false
     */
@@ -22,21 +22,25 @@ if (!function_exists('is_dir_empty')) {
 }
 
 if (!function_exists('limitFiles')) {
-    /*
+    /**
     * Проверяет количество файлов в папке и удаляет старые, есть лимит по количеству файлов
     *  @return string
     */
     function limitFiles($path, $amount = 10) {
 
-        $amount += 1;
-        $result = exec("cd {$path} && ls -1t | tail -n +{$amount} | xargs rm -f");
-
-        return $result;
+        if (!is_dir_empty($path)){
+            $amount += 1;
+            $result = exec("cd {$path} && ls -1t | tail -n +{$amount} | xargs rm -f");
+            if ($result)
+                return true;
+        } else {
+            return false;
+        }
     }
 }
 
 if (!function_exists('lastCreatedFile')) {
-    /*
+    /**
     * Имя последнего файла в папке
     */
     function lastCreatedFile($path) {
@@ -45,7 +49,7 @@ if (!function_exists('lastCreatedFile')) {
 }
 
 if (!function_exists('createSymLink')) {
-    /*
+    /**
     * создание символьной линки по пути
     */
     function createSymlink($path, $symlink) {
@@ -60,7 +64,22 @@ if (!function_exists('createSymLink')) {
             if (!is_link($symlink))
                 exec("ln -s {$symlink} {$path}");
 
+        return true;
     }
+}
+
+if (!function_exists('createDirectories')) {
+    function createDirectories(array $dirArray, $env) {
+        $dirCreated = true;
+        foreach ($dirArray as $path) {
+            $dir = $env . $path;
+            if (!is_dir($dir))
+                if (!mkdir($dir, 0777, true))
+                    $dirCreated = false;
+        }
+        return $dirCreated;
+    }
+
 }
 
 if (!function_exists('saveJsonFile')) {
@@ -68,25 +87,18 @@ if (!function_exists('saveJsonFile')) {
     * сохранить файл json
     */
     function saveJsonFile($filename, $data) {
+
         $file = fopen($filename, 'w');
-        fwrite($file, $data);
-        fclose($file);
+        if ($file)
+            if (fwrite($file, $data))
+                if (fclose($file))
+                    return true;
         /*   chmod($filename,0777);*/
-    }
-}
-
-if (!function_exists('createDirectories')) {
-    function createDirectories(array $dirArray, $env) {
-        foreach ($dirArray as $path) {
-            $dir = $env . $path;
-            if (!is_dir($dir))
-               if (mkdir($dir, 0777, true)) return true;
-        }
-
         return false;
     }
-
 }
+
+
 
 if (!function_exists('setMode')) {
 
@@ -101,5 +113,26 @@ if (!function_exists('createUrl')){
         $link = "/apartments/korp{$korp}/sec{$sec}/floor{$floor}/fnumb{$fnumb}/numb{$numb}/quantity{$qty}/id{$id}/";
 
         return $link;
+    }
+}
+
+if (!function_exists('delete_directory')) {
+
+    function delete_directory($dirname) {
+        if (is_dir($dirname))
+            $dir_handle = opendir($dirname);
+        if (!$dir_handle)
+            return false;
+        while($file = readdir($dir_handle)) {
+            if ($file != "." && $file != "..") {
+                if (!is_dir($dirname."/".$file))
+                    unlink($dirname."/".$file);
+                else
+                    delete_directory($dirname.'/'.$file);
+            }
+        }
+        closedir($dir_handle);
+        rmdir($dirname);
+        return true;
     }
 }

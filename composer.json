@@ -10,12 +10,20 @@
         "vlucas/phpdotenv": "^3.3",
         "psr/log": "^1.1",
         "monolog/monolog": "^1.24",
-        "ext-SimpleXML": "^7.2"
+        "ext-SimpleXML": "^7.2",
+        "sebastian/resource-operations": "^2.0",
+        "mikey179/vfsStream": "^1.6"
     },
     "autoload": {
         "psr-4": {"Parser\\": "Src/"},
+        "classmap": [
+            "Src/"
+        ],
         "files": [
             "Src/helpers.php"
         ]
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^8.1"
     }
 }
